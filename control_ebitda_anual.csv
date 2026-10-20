@@ -1,0 +1,8 @@
+﻿anio,suma_trimestres_modelo_usd_millones,ebitda_anual_referencia_usd_millones,diferencia_suma_menos_anual_usd_millones,estado_control,fuente_anual_url,nota_control
+2019,202.221,202.221,0.0,REVISAR_COMPARATIVOS,https://buenaventura.com/wp-content/uploads/2024/09/4to-trimestre-2019.pdf,Control detallado de FY19 en el reporte original; comparativos posteriores muestran otra cifra (202.8).
+2020,147.253,147.38,-0.127,DIFERENCIA_0.127,https://buenaventura.com/wp-content/uploads/2024/09/4to-trimestre-2021.pdf,FY20 comparativo de 4Q21; suma trimestral detallada: 147.253.
+2021,204.366,204.366,-0.0,CONCILIA_SERIE_MODELO,https://buenaventura.com/wp-content/uploads/2024/09/4to-trimestre-2021.pdf,FY21 exacto de 4Q21; el Q3 de la serie modelo se deriva del acumulado 9M21.
+2022,173.1,173.1,0.0,CONCILIA_REDONDEO,https://buenaventura.com/wp-content/uploads/2024/11/pre2023-06.pdf,FY22 comparable de operaciones directas excluyendo US$300m por la venta de Yanacocha; el reporte original presenta 473.1 incluyendo ese efecto.
+2023,196.0,199.2,-3.2,REVISAR_DIFERENCIA_3.2,https://www.buenaventura.com/wp-content/uploads/2025/02/4Q24-BVN-Earnings-Press-Release.pdf,FY23 comparable de 4Q24 excluyendo la venta de Contacto; la serie trimestral elegida suma 196.0 y deja una diferencia de -3.2 frente al anual. No se fuerza a cero.
+2024,431.6,431.2,0.4,REVISAR_DIFERENCIA_0.4,https://buenaventura.com/wp-content/uploads/2025/02/4Q25-BVN-Earnings-Press-Release-Vf.pdf,"FY24 comparable publicado en 4Q25, excluye Chaupiloma; comparativos trimestrales suman 431.6."
+2025,812.0,811.9,0.1,DIFERENCIA_REDONDEO_0.1,https://buenaventura.com/wp-content/uploads/2025/02/4Q25-BVN-Earnings-Press-Release-Vf.pdf,FY25 oficial; suma de trimestres redondeados: 812.0.
