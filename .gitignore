@@ -1,15 +1,10 @@
 .venv/
+venv/
 __pycache__/
 *.py[cod]
-outputs/*
-!outputs/.gitkeep
-
-# Archivos locales y secretos
+.DS_Store
+.streamlit/secrets.toml
 .env
 .env.*
-!.env.example
-.streamlit/secrets.toml
-
-# Archivos de sistema
-.DS_Store
-Thumbs.db
+outputs/
+*.log

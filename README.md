@@ -1,52 +1,47 @@
-# Modelo predictivo XGBoost — Buenaventura
+# Buenaventura · Pronóstico de ingresos trimestrales
 
-## Preparar en Cursor (Windows)
-1. Descomprime el ZIP y abre la carpeta en Cursor (File > Open Folder).
-2. El Excel ya está dentro de `data/`. Verifica que se llame `DEMO DAY - UNIDAD I .xlsx`.
-3. En Terminal > New Terminal ejecuta:
+Aplicación experimental en Streamlit para explorar escenarios de ingresos trimestrales a partir de 30 observaciones históricas (2019Q1–2026Q2) y precios de metales publicados por el Banco Mundial. **No es una proyección oficial de Buenaventura ni una herramienta de inversión validada.**
+
+## Contenido del proyecto
+
+- `app_ventas.py`: aplicación Streamlit revisada.
+- `data/base_ventas_buenaventura_2019Q1_2026Q2.csv`: serie de ingresos con fuentes por fila; la aplicación la lee, no la modifica.
+- `assets/mining_header.jpg` y `assets/mining_sidebar.jpg`: recursos decorativos; no son fotografías oficiales de una operación minera.
+- `requirements.txt`: dependencias para el entorno web.
+- `AUDITORIA_FINAL.md`: resultado y límites de la revisión previa a publicación.
+
+## Ejecutar localmente en Windows
+
+Desde esta carpeta (o desde la terminal de VS Code/Cursor ubicada en ella):
+
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-Si falla la activación en PowerShell, ejecuta ` .\.venv\Scripts\python.exe -m pip install -r requirements.txt` y antepone ` .\.venv\Scripts\python.exe` a los comandos siguientes.
-
-## Fase 1: revisar el Excel
-```powershell
-python src/01_explorar_excel.py
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m streamlit run app_ventas.py
 ```
 
-## Fase 2: descargar tasa BCRP
-```powershell
-python src/02_descargar_tasa_bcrp.py
-```
-Fuente oficial: serie diaria PD12301MD, Tasa de Referencia de la Política Monetaria. API documentada en https://estadisticas.bcrp.gob.pe/estadisticas/series/ayuda/api. El script puede requerir ajuste si cambia el formato CSV de la API; no rellenes datos manualmente ni inventes valores.
+La aplicación se abrirá en una dirección local de Streamlit, normalmente `http://localhost:8501`.
 
-## Fase 3: cargar EBITDA histórico verificado
-Completa `data/ebitda_trimestral_plantilla.csv` con una fila por trimestre y EBITDA en USD millones. Agrega la URL del reporte oficial, el nombre del documento y la metodología. No copies EBITDA acumulado como si fuera de un trimestre:
-- Q1 = acumulado a marzo.
-- Q2 = acumulado a junio menos acumulado a marzo.
-- Q3 = acumulado a septiembre menos acumulado a junio.
-- Q4 = EBITDA anual menos acumulado a septiembre.
-Solo aplica diferencias si los reportes usan la misma definición de EBITDA. No mezcles EBITDA ajustado y no ajustado. La base del Excel original sirve como contexto, pero sus ventas de 2025 no sustituyen una serie histórica de EBITDA trimestral.
+## Publicar en Streamlit Community Cloud
 
-Fuentes: https://buenaventura.com/inversionista/estados-financieros-2025/ y https://buenaventura.com/en/inversionista/reporte-trimestral-2025/
+1. Crea un repositorio de GitHub y sube **todo el contenido de esta carpeta**, incluida la carpeta `data` y `assets`.
+2. En Streamlit Community Cloud, crea una nueva aplicación y elige el repositorio, la rama y `app_ventas.py` como archivo principal.
+3. Espera a que instale `requirements.txt` y prueba los controles en la URL pública.
+4. No subas `.venv`, tokens, contraseñas ni archivos de otros proyectos.
 
-## Fase 4: unir las fuentes
-```powershell
-python src/03_preparar_base_modelo.py
-```
-Revisa `data/base_modelo_trimestral.csv` y confirma que los trimestres coincidan y que no falte EBITDA ni tasa.
+## Requisito de conexión
 
-## Fase 5: entrenar y evaluar
-```powershell
-python src/04_entrenar_xgboost.py
-```
-El script se detiene si no hay al menos 24 filas utilizables. Separa cronológicamente 80% entrenamiento y 20% prueba, y compara XGBoost con una referencia que predice el EBITDA del trimestre previo. Resultados: `outputs/predicciones_prueba.csv` y `outputs/evaluacion_modelo.txt`.
+La aplicación consulta la página de materias primas del Banco Mundial y descarga su archivo mensual XLSX para construir precios trimestrales. Por tanto, la instancia pública requiere conexión de salida disponible al sitio del Banco Mundial. Si la fuente cambia de URL o no está disponible, la carga de precios puede fallar; antes de presentar resultados, verifica que la app muestra correctamente el dato externo y su periodo. La actualización tiene caché temporal de 12 horas.
 
-## Criterios metodológicos
-- La tasa del BCRP no demuestra causalidad sobre EBITDA.
-- Las variables deben estar disponibles en la fecha en que se haría la predicción; evitar fuga de información.
-- MAE/RMSE bajos solo describen el error de esa prueba histórica; no garantizan predicciones futuras.
-- Si EBITDA no está publicado de manera consistente, detenerse y acordar una definición replicable desde estados financieros antes de entrenar.
+## Cómo leer el escenario del oro
+
+El porcentaje cambia el supuesto de precio solo para los trimestres cuyo precio completo no está observado. El modelo XGBoost puede devolver el mismo ingreso para varios precios dentro de un rango; en ese caso, la app lo advierte y muestra en la tabla el efecto de cada trimestre frente al escenario de 0 %. No se fuerza una elasticidad artificial.
+
+## Limitaciones que no se deben ocultar
+
+- Solo hay 30 trimestres históricos.
+- La variante XGBoost que se muestra como seleccionada se elige por el MAE recursivo de cuatro trimestres. En la validación a un trimestre, la referencia sencilla de último trimestre fue más precisa; la app mantiene visible la advertencia.
+- Los pronósticos de cinco a ocho trimestres son extrapolaciones y no tienen evaluación específica al mismo horizonte.
+- La banda `±RMSE` es ilustrativa, no es un intervalo de confianza.
+- El índice ponderado es una aproximación analítica a partir de volúmenes y precios realizados de FY2025, no una desagregación auditada de ingresos por metal.
+- Aunque la estructura de datos se verificó, no se afirma una certificación documental independiente 30/30 de cada cifra trimestral.
