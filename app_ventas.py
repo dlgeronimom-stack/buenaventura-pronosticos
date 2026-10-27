@@ -17,14 +17,14 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from xgboost import XGBRegressor
 
 # =====================================================================
-# BUENAVENTURA · INTELIGENCIA DE VENTAS | Versión final
+# BUENAVENTURA · INTELIGENCIA DE VENTAS | Revisión 1.8 tipografía más legible
 # Lee la base histórica en modo de solo lectura. No escribe en data/ ni outputs/.
 # =====================================================================
 st.set_page_config(
     page_title="Buenaventura | Pronóstico de ingresos",
     page_icon="⛏️",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 APP_DIR = Path(__file__).resolve().parent
@@ -42,7 +42,7 @@ Q2_2026_FINANCIALS_URL = "https://buenaventura.com/wp-content/uploads/2026/04/2Q
 
 TARGET = "total_revenues_usd_millones"
 FEATURES_INDEX = ["ventas_lag_1", "ventas_lag_4", "indice_metales_ponderado_lag_1"]
-FEATURES_GOLD = ["ventas_lag_1", "ventas_lag_4", "precio_oro_lag_1_usd_oz"]
+FEATURES_GOLD = ["ventas_lag_1", "ventas_lag_4", "variacion_oro_pct_lag_1"]
 FEATURES_NO_EXT = ["ventas_lag_1", "ventas_lag_4"]
 FEATURE_SETS = {
     "Índice ponderado de metales": FEATURES_INDEX,
@@ -58,7 +58,7 @@ EXTENSION_META = {
         "short": "Índice de metales",
     },
     "Precio del oro": {
-        "feature": "precio_oro_lag_1_usd_oz",
+        "feature": "variacion_oro_pct_lag_1",
         "market_col": "precio_oro_usd_oz",
         "label": "Precio del oro",
         "unit": "US$/onza troy",
@@ -112,7 +112,9 @@ st.markdown(
     html {{ scroll-behavior: smooth; }}
     .stApp {{ background: var(--bvn-bg); color: var(--bvn-ink); }}
     [data-testid="stHeader"] {{ background: rgba(242,246,242,.97); }}
-    [data-testid="stMainBlockContainer"], .block-container {{ max-width: 1660px; padding-top: .7rem; padding-bottom: 2.2rem; }}
+    [data-testid="stMainBlockContainer"], .block-container {{ max-width: 1900px; width: 100%; padding-left: clamp(1rem, 2.2vw, 2.6rem); padding-right: clamp(1rem, 2.2vw, 2.6rem); padding-top: .7rem; padding-bottom: 2.2rem; }}
+    /* Diseño de pantalla completa: la navegación lateral deja de ocupar ancho. */
+    [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
     [data-testid="stSidebar"] {{
       background-color: #0D2E24;
       background-image: linear-gradient(180deg, rgba(9,37,29,.98) 0%, rgba(9,37,29,.88) 55%, rgba(9,37,29,.42) 100%), url('{SIDEBAR_IMAGE_URI}');
@@ -174,7 +176,16 @@ st.markdown(
     .bvn-step-text {{ color:#54675D; font-size:.78rem; line-height:1.4; }}
     .bvn-footer {{ border-top:1px solid #DDE6DE; margin-top:1.2rem; padding-top:.8rem; color:#62736A; font-size:.75rem; line-height:1.5; }}
     /* Visualizacion refinada de historia, pronostico y escenarios */
-    .bvn-chart-note {{ color:#718477; font-size:.84rem; line-height:1.45; margin:.05rem 0 .3rem 0; }}
+    .bvn-chart-note {{ color:#718477; font-size:.9rem; line-height:1.5; margin:.05rem 0 .3rem 0; }}
+    .bvn-chart-scenario-card {{
+      box-sizing:border-box; width:100%; max-width:340px; margin:0 0 .7rem auto;
+      padding:.72rem .95rem; border:1px solid #DDE7DE; border-radius:14px;
+      background:linear-gradient(135deg,#FFFFFF 0%,#F4F9F3 100%);
+      box-shadow:0 5px 16px rgba(22,50,35,.045);
+    }}
+    .bvn-chart-scenario-label {{ color:#6C8173; font-size:.66rem; line-height:1.3; font-weight:850; letter-spacing:.11em; text-transform:uppercase; }}
+    .bvn-chart-scenario-value {{ color:#173D2C; font-size:clamp(1.45rem,2vw,1.9rem); line-height:1.08; font-weight:900; margin:.18rem 0 .22rem 0; }}
+    .bvn-chart-scenario-foot {{ color:#63786B; font-size:.73rem; line-height:1.4; }}
     .bvn-outlook-head {{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; margin:.15rem 0 .75rem 0; padding:.65rem .75rem; border:1px solid #E0EAE1; border-radius:12px; background:linear-gradient(110deg,#F6FAF5,#FFFFFF); }}
     .bvn-outlook-head-label {{ color:#718477; font-size:.65rem; font-weight:850; letter-spacing:.11em; text-transform:uppercase; }}
     .bvn-outlook-head-value {{ color:#1C5B3D; font-size:.84rem; font-weight:850; white-space:nowrap; }}
@@ -480,7 +491,10 @@ def feature_frame(sales: pd.DataFrame, market: pd.DataFrame) -> pd.DataFrame:
     grid["ventas_lag_1"] = grid[TARGET].shift(1)
     grid["ventas_lag_4"] = grid[TARGET].shift(4)
     grid["indice_metales_ponderado_lag_1"] = grid["indice_metales_ponderado"].shift(1)
-    grid["precio_oro_lag_1_usd_oz"] = grid["precio_oro_usd_oz"].shift(1)
+    # Para el oro usamos variación porcentual trimestral y un rezago.
+    # Así el modelo aprende movimientos del precio, no solo su nivel tendencial.
+    grid["variacion_oro_pct"] = grid["precio_oro_usd_oz"].pct_change(fill_method=None) * 100.0
+    grid["variacion_oro_pct_lag_1"] = grid["variacion_oro_pct"].shift(1)
     return grid
 
 
@@ -754,10 +768,25 @@ def project_sales(
             scenario_history[external_quarter] = external_value
             external_source = f"Supuesto desde {base_quarter}"
 
+        # El escenario se define en precio (US$/onza), pero el modelo de oro
+        # recibe el cambio porcentual trimestral para captar movimientos relativos.
+        if selected_external_name == "Precio del oro":
+            previous_external_quarter = prior_quarter(external_quarter)
+            previous_external_value = scenario_history.get(previous_external_quarter)
+            if previous_external_value is None:
+                previous_external_value = external_history.get(previous_external_quarter)
+            if previous_external_value is None or previous_external_value <= 0:
+                raise ValueError(
+                    f"No hay precio previo del oro para calcular la variación de {external_quarter}."
+                )
+            model_external_value = (external_value / previous_external_value - 1.0) * 100.0
+        else:
+            model_external_value = external_value
+
         row_values = {
             "ventas_lag_1": lag1,
             "ventas_lag_4": lag4,
-            feature_col: external_value,
+            feature_col: model_external_value,
         }
         xrow = pd.DataFrame([row_values])[feature_cols]
         predicted_change = float(model.predict(xrow)[0])
@@ -771,6 +800,7 @@ def project_sales(
             "periodo_variable_externa": external_quarter,
             "variable_externa": selected_external_name,
             "valor_variable_externa_lag_1": external_value,
+            "variacion_oro_usada_pct": model_external_value if selected_external_name == "Precio del oro" else np.nan,
             "unidad_variable_externa": meta["unit"],
             "origen_variable_externa": external_source,
         })
@@ -783,29 +813,7 @@ def project_sales(
 # =====================================================================
 # DATOS, MODELO Y DISTRIBUCIÓN DEL DASHBOARD
 # =====================================================================
-with st.sidebar:
-    st.markdown(
-        f"""
-        <div class="bvn-side-brand">
-          <img src="{OFFICIAL_LOGO_URL}" alt="Compañía de Minas Buenaventura" loading="eager">
-          <div class="bvn-side-wordmark">INTELIGENCIA DE VENTAS</div>
-          <div class="bvn-side-tagline">Pronóstico de ingresos</div>
-        </div>
-        <nav class="bvn-nav" aria-label="Navegación del dashboard">
-          <a href="#top-dashboard">▥ &nbsp; Resumen</a>
-          <a href="#forecast-section">⌁ &nbsp; Pronóstico</a>
-          <a href="#validation-section">▤ &nbsp; Precisión del modelo</a>
-          <a href="#methodology-section">◎ &nbsp; Metodología</a>
-          <a href="#sources-section">⇩ &nbsp; Datos y fuentes</a>
-        </nav>
-        <div class="bvn-side-bottom">
-          <div class="motto">Minería<br>que genera<br>un mundo mejor</div>
-          <div class="side-note"><b>Modelo analítico</b><br>XGBoost + variables de precios de metales<br><br><b>Prototipo analítico · Revisión 1.1</b><br>No es una proyección oficial de la compañía.<br><br><span style="font-size:.65rem;opacity:.8">Build: 2026-10-20 · escenario sincronizado</span></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
+# Navegación lateral retirada: dashboard en pantalla amplia.
 sales_file = find_sales_file()
 if sales_file is None:
     st.error(
@@ -840,10 +848,29 @@ try:
     multi = comparisons["multi_step"]
     one_metrics = comparison_metrics(one, multi_step=False)
     multi_metrics = comparison_metrics(multi, multi_step=True)
-    selected_model_name, selected_feature_cols, _ = choose_external_model(multi)
+    recommended_model_name, recommended_feature_cols, _ = choose_external_model(multi)
 except Exception as exc:
     st.error(f"No se pudo completar la validación temporal: {exc}")
     st.stop()
+
+# Se permite fijar el oro durante la prueba de sensibilidad, sin alterar la evaluación comparativa.
+forecast_model_choice = st.selectbox(
+    "Variable externa del pronóstico",
+    options=[
+        "Mejor MAE recursivo (4T)",
+        "Precio del oro (probar escenario)",
+        "Índice ponderado de metales",
+    ],
+    index=0,
+    help="La opción automática usa la mejor variante externa por MAE en validación recursiva de cuatro trimestres. Elige oro para comprobar su sensibilidad.",
+    key="forecast_external_model_choice",
+)
+if forecast_model_choice == "Precio del oro (probar escenario)":
+    selected_model_name, selected_feature_cols = "Precio del oro", FEATURES_GOLD
+elif forecast_model_choice == "Índice ponderado de metales":
+    selected_model_name, selected_feature_cols = "Índice ponderado de metales", FEATURES_INDEX
+else:
+    selected_model_name, selected_feature_cols = recommended_model_name, recommended_feature_cols
 
 last_sales = float(sales[TARGET].iloc[-1])
 last_sales_quarter = str(sales["trimestre"].iloc[-1])
@@ -888,17 +915,18 @@ with st.container(border=True):
             f"Cambio trimestral supuesto de {selected_model_name.lower()}",
             min_value=-10.0, max_value=10.0, value=0.0, step=1.0, format="%.0f%%",
             help="Solo se aplica a trimestres sin un dato externo completo observado. 0% mantiene el último valor completo conocido.",
-            key="scenario_pct_control",
+            key="scenario_pct_control_v14",
         )
-        # Fuente única para cálculo y presentación; evita depender de valores duplicados.
-        scenario_pct_active = float(st.session_state["scenario_pct_control"])
+        # Fuente única de verdad: el valor devuelto por el deslizador alimenta
+        # cálculo, gráfica, tarjeta y comparación contrafactual en esta ejecución.
+        scenario_pct_active = float(scenario_pct_widget)
         scenario_pct_label = f"{scenario_pct_active:+.0f}%"
         st.caption(f"Escenario activo en esta sesión: {scenario_pct_label} por trimestre.")
     with cfg3:
         if st.button("↻ Actualizar precios externos", type="primary", width="stretch", key="refresh_prices_main"):
             load_metal_index_quarterly.clear()
             st.rerun()
-    st.caption("El escenario se recalcula al mover los controles. Este botón fuerza la actualización de los precios externos del Banco Mundial.")
+    st.caption("El escenario se recalcula al mover los controles. El porcentaje del oro se aplica a periodos sin precio externo observado; los porcentajes de las tarjetas de ingresos miden variaciones de ventas, no variaciones del oro. La tabla muestra el efecto frente a 0%. Este botón fuerza la actualización de los precios externos del Banco Mundial.")
     st.caption("El supuesto editable no es una predicción oficial del precio de los metales. Los datos de ingresos se leen sin modificarse.")
 
 # Entrenar el modelo elegido y preparar proyecciones.
@@ -956,7 +984,7 @@ first_value = float(first_row["pronostico_xgboost_usd_millones"])
 last_value = float(last_row["pronostico_xgboost_usd_millones"])
 
 def format_usd_millions(value: float) -> str:
-    """Formato espanol compacto: US$ 545,7 millones."""
+    """Formato monetario compacto: US$ 536,7 millones."""
     number = f"{value:,.1f}"
     number = number.replace(",", "TMPSEP").replace(".", ",").replace("TMPSEP", ".")
     return f"US$ {number} millones"
@@ -981,18 +1009,35 @@ st.caption(f"Último ingreso real disponible: {last_sales_quarter}. Los precios 
 
 # Gráfica principal y escenario futuro en dos columnas, igual que el concepto visual.
 st.markdown('<div id="forecast-section"></div>', unsafe_allow_html=True)
-chart_col, outlook_col = st.columns([2.0, 1.05], gap="medium")
+# La gráfica recibe más ancho; el panel de escenario conserva espacio suficiente.
+chart_col = st.container()
 with chart_col:
     with st.container(border=True):
-        st.markdown('<div class="bvn-panel-title"><span class="bvn-mini-icon">▥</span>Histórico y pronóstico de ingresos trimestrales</div>', unsafe_allow_html=True)
-        st.markdown('<div class="bvn-chart-note">Ingresos consolidados en US$ millones · La línea punteada separa los datos observados del pronóstico.</div>', unsafe_allow_html=True)
+        # Encabezado dividido: el escenario se coloca en el espacio superior derecho,
+        # sin reducir el ancho de la gráfica ni duplicar la tarjeta bajo el gráfico.
+        chart_title_col, chart_scenario_col = st.columns([3.15, 1.0], gap="large")
+        with chart_title_col:
+            st.markdown('<div class="bvn-panel-title"><span class="bvn-mini-icon">▥</span>Histórico y pronóstico de ingresos trimestrales</div>', unsafe_allow_html=True)
+            st.markdown('<div class="bvn-chart-note">Ingresos consolidados en US$ millones · La línea punteada separa los datos observados del pronóstico.</div>', unsafe_allow_html=True)
+        with chart_scenario_col:
+            st.markdown(
+                f"""
+                <div class="bvn-chart-scenario-card">
+                  <div class="bvn-chart-scenario-label">Supuesto trimestral</div>
+                  <div class="bvn-chart-scenario-value" translate="no">{scenario_pct_label}</div>
+                  <div class="bvn-chart-scenario-foot">{selected_model_name} · solo precios externos faltantes</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         history_view = sales[["trimestre", TARGET]].copy().rename(columns={TARGET: "Ingresos"})
         forecast_view = forecast[["trimestre", "pronostico_xgboost_usd_millones"]].copy().rename(columns={"pronostico_xgboost_usd_millones": "Ingresos"})
         hist_x = history_view["trimestre"].tolist()
         future_x = forecast_view["trimestre"].tolist()
         combined_labels = hist_x + future_x
-        # Mostrar etiquetas alternas en la historia para conservar legibilidad; etiquetar todos los puntos futuros.
-        tick_values = hist_x[::2]
+        # Mostrar una etiqueta por año en la historia y todos los trimestres futuros.
+        # Se añade el último trimestre real para marcar claramente el inicio del pronóstico.
+        tick_values = hist_x[::4]
         if last_sales_quarter not in tick_values:
             tick_values.append(last_sales_quarter)
         tick_values += future_x
@@ -1023,39 +1068,54 @@ with chart_col:
             hovertemplate="%{x}<br>US$ %{y:,.1f} millones<extra>Real</extra>",
         ))
         pred_x = [last_sales_quarter] + future_x
+
+        # Línea de referencia calculada con el mismo modelo y escenario externo 0%.
+        # El dato histórico final es común a ambos escenarios; solo cambia el futuro.
         pred_y = [last_sales] + [float(v) for v in forecast_view["Ingresos"]]
+        if forecast_reference is not None:
+            base_future_values = forecast_reference["pronostico_xgboost_usd_millones"].astype(float).tolist()
+            pred_base_y = [last_sales] + base_future_values
+            fig.add_trace(go.Scatter(
+                x=pred_x, y=pred_base_y, mode="lines+markers", name="Escenario base (0%)",
+                line=dict(color="#7D8790", width=2.2, dash="dot"),
+                marker=dict(size=5, symbol="circle", color="#7D8790", line=dict(color="#FFFFFF", width=1)),
+                hovertemplate="%{x}<br>US$ %{y:,.1f} millones<extra>Base 0%</extra>",
+            ))
+        pred_trace_name = f"Escenario seleccionado ({scenario_pct_label})"
         fig.add_trace(go.Scatter(
-            x=pred_x, y=pred_y, mode="lines+markers", name="Pronóstico XGBoost",
+            x=pred_x, y=pred_y, mode="lines+markers", name=pred_trace_name,
             line=dict(color="#78B83F", width=3, dash="dash"),
             marker=dict(size=8, symbol="diamond", color="#78B83F", line=dict(color="#FFFFFF", width=1)),
-            hovertemplate="%{x}<br>US$ %{y:,.1f} millones<extra>Pronóstico</extra>",
+            hovertemplate="%{x}<br>US$ %{y:,.1f} millones<extra>Escenario seleccionado</extra>",
         ))
         fig.add_vline(x=last_sales_quarter, line_width=1.4, line_dash="dot", line_color="#627F6D")
         fig.add_annotation(
             x=last_sales_quarter, y=1.02, xref="x", yref="paper",
             text="INICIO DEL PRONÓSTICO", showarrow=False, xanchor="right", yanchor="bottom",
-            font=dict(color="#477957", size=9), bgcolor="rgba(251,253,251,.92)",
+            font=dict(color="#477957", size=10), bgcolor="rgba(251,253,251,.92)",
             bordercolor="#DDE8DC", borderwidth=1, borderpad=4,
         )
         fig.update_layout(
-            height=390, template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#FBFDFB",
-            margin=dict(l=48, r=14, t=58, b=82),
-            legend=dict(orientation="h", y=1.14, x=0, xanchor="left", yanchor="bottom", font=dict(color="#193D2D", size=11), bgcolor="rgba(255,255,255,.96)", bordercolor="#E1EAE2", borderwidth=1),
-            font=dict(family="Arial, sans-serif", color="#2C4035", size=12), hovermode="x unified",
+            height=500, template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#FBFDFB",
+            margin=dict(l=60, r=24, t=88, b=100),
+            legend=dict(orientation="h", y=1.13, x=0, xanchor="left", yanchor="bottom", font=dict(color="#193D2D", size=12), bgcolor="rgba(255,255,255,.98)", bordercolor="#E1EAE2", borderwidth=1, tracegroupgap=8),
+            font=dict(family="Arial, sans-serif", color="#2C4035", size=12), hovermode="x unified", uirevision="bvn-chart-v1.8",
             hoverlabel=dict(bgcolor="#12372C", bordercolor="#12372C", font=dict(color="#FFFFFF", size=12)),
             # Fija explícitamente el orden temporal: los trazos de la banda de pronóstico
             # se añaden antes que la historia y, sin categoryarray, Plotly puede ordenar
             # las categorías por su primera aparición (dibujando el futuro a la izquierda).
-            xaxis=dict(title=dict(text="Trimestre", font=dict(color="#163D2C", size=13)), tickfont=dict(color="#344A3D", size=10), tickmode="array", tickvals=tick_values, tickangle=-38, categoryorder="array", categoryarray=combined_labels, showgrid=False, automargin=True, showline=True, linecolor="#9BAFA1", title_standoff=14),
-            yaxis=dict(title=dict(text="Ingresos totales (US$ millones)", font=dict(color="#163D2C", size=13)), tickfont=dict(color="#52695D", size=11), gridcolor="#E4ECE5", zeroline=False, tickformat=",.0f", rangemode="tozero", automargin=True, title_standoff=12, showline=False),
+            xaxis=dict(title=dict(text="Trimestre", font=dict(color="#163D2C", size=14)), tickfont=dict(color="#344A3D", size=12), tickmode="array", tickvals=tick_values, tickangle=-32, categoryorder="array", categoryarray=combined_labels, showgrid=False, automargin=True, showline=True, linecolor="#9BAFA1", title_standoff=14),
+            yaxis=dict(title=dict(text="Ingresos totales (US$ millones)", font=dict(color="#163D2C", size=14)), tickfont=dict(color="#52695D", size=12), gridcolor="#E4ECE5", zeroline=False, tickformat=",.0f", rangemode="tozero", automargin=True, title_standoff=12, showline=False),
         )
-        fig.update_xaxes(title=dict(text="Trimestre", font=dict(color="#163D2C", size=13)), tickfont=dict(color="#344A3D", size=10))
-        fig.update_yaxes(title=dict(text="Ingresos totales (US$ millones)", font=dict(color="#163D2C", size=13)), tickfont=dict(color="#344A3D", size=11))
-        st.plotly_chart(fig, width="stretch", theme=None, config={"displaylogo": False, "responsive": True})
-        st.markdown('<div class="bvn-chart-note">La banda verde representa ±RMSE de validación recursiva; es orientativa, no un intervalo de confianza estadístico.</div>', unsafe_allow_html=True)
+        fig.update_xaxes(title=dict(text="Trimestre", font=dict(color="#163D2C", size=14)), tickfont=dict(color="#344A3D", size=12))
+        fig.update_yaxes(title=dict(text="Ingresos totales (US$ millones)", font=dict(color="#163D2C", size=14)), tickfont=dict(color="#344A3D", size=12))
+        st.plotly_chart(
+            fig, width="stretch", theme=None,
+            config={"displaylogo": False, "responsive": True, "scrollZoom": True},
+        )
+        st.markdown('<div class="bvn-chart-note">La línea punteada gris es el escenario base (0%, cuando se pudo calcular); la línea verde es el escenario seleccionado. La banda verde representa ±RMSE de validación recursiva: es orientativa, no un intervalo de confianza estadístico.</div>', unsafe_allow_html=True)
 
-with outlook_col:
-    with st.container(border=True):
+with st.container(border=True):
         st.markdown('<div class="bvn-panel-title"><span class="bvn-mini-icon">◎</span>Escenario de ingresos futuros</div>', unsafe_allow_html=True)
         st.markdown(
             f'<div class="bvn-outlook-head"><span class="bvn-outlook-head-label">Horizonte proyectado</span><span class="bvn-outlook-head-value">{len(forecast)} trimestres</span></div>',
@@ -1066,23 +1126,27 @@ with outlook_col:
         last_change_pct = (last_value / last_sales - 1) * 100
         last_pill_class = "bvn-pill-positive" if last_change_pct >= 0 else "bvn-pill-negative"
         last_pill_icon = "↑" if last_change_pct >= 0 else "↓"
+        # Tarjetas de ingresos: los porcentajes de estas dos tarjetas son
+        # variaciones de INGRESOS frente al último ingreso real; no son el
+        # supuesto de variación del precio del oro.
         st.markdown(
             f"""
             <div class="bvn-outlook-card bvn-outlook-card-primary">
               <div class="bvn-outlook-label"><span>Primera proyección</span><span class="bvn-outlook-period">{first_row['trimestre']}</span></div>
-              <div class="bvn-outlook-value">{first_value_display}</div>
-              <div class="bvn-outlook-foot"><span class="bvn-outlook-pill {first_pill_class}">{first_pill_icon} {first_change_pct:+.1f}%</span><span>frente al último ingreso real</span></div>
+              <div class="bvn-outlook-value" translate="no">{first_value_display}</div>
+              <div class="bvn-outlook-foot"><span class="bvn-outlook-pill {first_pill_class}">{first_pill_icon} {first_change_pct:+.1f}%</span><span>cambio en ingresos frente al último ingreso real</span></div>
             </div>
             <div class="bvn-outlook-card bvn-outlook-card-final">
               <div class="bvn-outlook-label"><span>Último trimestre proyectado</span><span class="bvn-outlook-period">{last_row['trimestre']}</span></div>
-              <div class="bvn-outlook-value">{last_value_display}</div>
-              <div class="bvn-outlook-foot"><span class="bvn-outlook-pill {last_pill_class}">{last_pill_icon} {last_change_pct:+.1f}%</span><span>frente al último ingreso real</span></div>
+              <div class="bvn-outlook-value" translate="no">{last_value_display}</div>
+              <div class="bvn-outlook-foot"><span class="bvn-outlook-pill {last_pill_class}">{last_pill_icon} {last_change_pct:+.1f}%</span><span>cambio en ingresos frente al último ingreso real</span></div>
             </div>
-            <div class="bvn-outlook-card bvn-outlook-card-scenario">
-              <div class="bvn-outlook-label"><span>Supuesto de variable externa</span><span class="bvn-outlook-period">Escenario editable</span></div>
-              <div class="bvn-outlook-value">{scenario_pct_label} <small>por trimestre</small></div>
-              <div class="bvn-outlook-foot"><span class="bvn-outlook-pill bvn-pill-neutral">Solo para precios faltantes</span></div>
-            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            f"""
             <div class="bvn-outlook-meta"><span class="bvn-outlook-meta-icon">⌁</span><span><strong>Periodo cubierto</strong>{first_row['trimestre']} – {last_row['trimestre']}</span></div>
             <div class="bvn-outlook-meta"><span class="bvn-outlook-meta-icon">◈</span><span><strong>Variable externa</strong>{selected_model_name}</span></div>
             """,
@@ -1113,7 +1177,8 @@ with outlook_col:
 
 # Tabla detallada e interpretación lado a lado.
 st.markdown('<div class="section-kicker">Pronóstico detallado</div>', unsafe_allow_html=True)
-table_col, explain_col = st.columns([2.15, 1.0], gap="medium")
+table_col = st.container()
+explain_col = st.container()
 with table_col:
     with st.container(border=True):
         st.markdown('<div class="bvn-panel-title"><span class="bvn-mini-icon">▤</span>Pronóstico trimestral detallado</div>', unsafe_allow_html=True)
@@ -1125,6 +1190,7 @@ with table_col:
             "Ingreso previo (US$ M)": forecast["ventas_lag_1_usd_millones"].map(lambda v: f"{v:,.2f}"),
             "Mismo trim. año previo": forecast["ventas_lag_4_usd_millones"].map(lambda v: f"{v:,.2f}"),
             external_title: forecast["valor_variable_externa_lag_1"].map(lambda v: f"{v:,.2f}"),
+            "Variación oro usada (%)": forecast["variacion_oro_usada_pct"].map(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—"),
             "Efecto vs 0% (US$ M)": forecast["efecto_vs_escenario_0_usd_millones"].map(lambda v: f"{v:+,.2f}" if pd.notna(v) else "No calculado"),
             "Periodo y origen del dato": forecast.apply(lambda row: f"{row['periodo_variable_externa']} · {row['origen_variable_externa']}", axis=1),
         })
