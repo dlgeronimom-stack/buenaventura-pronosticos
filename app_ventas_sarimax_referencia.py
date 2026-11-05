@@ -1156,7 +1156,7 @@ with st.sidebar:
     st.caption("Minería peruana · inteligencia de ventas")
     page = st.radio(
         "Secciones",
-        ["Resumen", "Probar escenarios", "Cómo interpretar", "Calidad del modelo", "Datos y fuentes"],
+        ["Probar escenarios", "Cómo interpretar", "Calidad del modelo", "Datos y fuentes"],
         index=0,
         key="page_navigation",
     )
@@ -1181,7 +1181,7 @@ if page == "Resumen":
 
 # Los controles en edición actualizan el precio equivalente, pero la gráfica
 # conserva el último escenario aplicado hasta pulsar el botón.
-scenario_page = page in ("Resumen", "Probar escenarios")
+scenario_page = page == "Probar escenarios"
 if scenario_page:
     st.markdown(
         '<section class="bvn-scenario-panel"><h3>Ajusta el escenario</h3>'
