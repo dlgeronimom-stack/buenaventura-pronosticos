@@ -1166,17 +1166,18 @@ with st.sidebar:
     st.caption("Herramienta analítica independiente; no es una proyección oficial de Buenaventura.")
     st.link_button("Ver portal de inversionistas", OFFICIAL_INVESTOR_URL, use_container_width=True)
 
-st.markdown(
-    """
-    <section class="bvn-hero">
-      <div class="bvn-hero-kicker">Ingresos · planificación trimestral</div>
-      <h1>Pronóstico de ingresos</h1>
-      <p>Revisa los ingresos publicados, cambia los supuestos de cobre, plata y dólar, y observa cómo cambia la estimación.</p>
-    </section>
-    """,
-    unsafe_allow_html=True,
-)
-st.info("La proyección es una estimación condicionada a los supuestos; no es una cifra oficial ni una garantía de ingresos.")
+if page == "Resumen":
+    st.markdown(
+        """
+        <section class="bvn-hero">
+          <div class="bvn-hero-kicker">Ingresos · planificación trimestral</div>
+          <h1>Pronóstico de ingresos</h1>
+          <p>Revisa los ingresos publicados, cambia los supuestos de cobre, plata y dólar, y observa cómo cambia la estimación.</p>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.info("La proyección es una estimación condicionada a los supuestos; no es una cifra oficial ni una garantía de ingresos.")
 
 # Los controles en edición actualizan el precio equivalente, pero la gráfica
 # conserva el último escenario aplicado hasta pulsar el botón.
