@@ -1158,7 +1158,7 @@ with st.sidebar:
     st.caption("Minería peruana · inteligencia de ventas")
     page_choice = st.radio(
         "Secciones",
-        ["Probar escenarios", "Cómo interpretar", "Calidad del modelo", "Datos y fuentes"],
+        ["Probar escenarios"],
         index=None,
         key="section_navigation_v2",
     )
@@ -1280,8 +1280,6 @@ first_value = float(first_row["pronostico_usd_millones"])
 first_change_pct = float(first_row["variacion_vs_trimestre_anterior_pct"])
 last_row = forecast.iloc[-1]
 last_value = float(last_row["pronostico_usd_millones"])
-if horizon > 4:
-    st.caption(f"Nota: el escenario llega hasta {last_row['trimestre']}. Más allá de cuatro trimestres es exploratorio: el backtest no valida ese horizonte y la incertidumbre aumenta.")
 
 if page in ("Resumen", "Probar escenarios"):
     st.subheader("Ingresos observados y estimación")
