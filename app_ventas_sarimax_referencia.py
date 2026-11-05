@@ -1158,9 +1158,9 @@ with st.sidebar:
     st.caption("Minería peruana · inteligencia de ventas")
     page_choice = st.radio(
         "Secciones",
-        ["Probar escenarios", "Cómo interpretar", "Calidad del modelo", "Datos y fuentes"],
-        index=None,
-        key="section_navigation_v2",
+        ["Resumen", "Probar escenarios", "Cómo interpretar", "Calidad del modelo", "Datos y fuentes"],
+        index=0,
+        key="section_navigation_v3",
     )
     st.divider()
     st.markdown("**Modelo en uso**")
