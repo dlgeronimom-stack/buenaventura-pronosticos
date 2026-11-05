@@ -89,7 +89,9 @@ f"""
 :root {{ --bvn-green:#174b37; --bvn-green-2:#276b4b; --bvn-ink:#20352b; --bvn-muted:#5b6b61; --bvn-bg:#f5f7f5; --bvn-line:#dce5de; }}
 .stApp {{ background:var(--bvn-bg); color:var(--bvn-ink); }}
 [data-testid="stHeader"] {{ display:none !important; height:0 !important; }}
-[data-testid="stMainBlockContainer"] {{ max-width:1320px; padding-top:1.1rem; padding-bottom:3rem; }}
+[data-testid="stMainBlockContainer"] {{ max-width:1220px; padding-top:.7rem; padding-bottom:1.5rem; }}
+[data-testid="stMainBlockContainer"]:has(.bvn-scenario-panel) {{ padding-top:.45rem; padding-bottom:1rem; }}
+[data-testid="stMainBlockContainer"]:has(.bvn-scenario-panel) > div[data-testid="stVerticalBlock"] {{ gap:.72rem; }}
 [data-testid="stSidebar"] {{ background:#123b2c; }}
 [data-testid="stSidebar"] * {{ color:#f6faf7; }}
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color:#d4e4d9 !important; }}
@@ -1154,17 +1156,40 @@ with st.sidebar:
         st.markdown("## Compañía de Minas Buenaventura")
     st.image(str(APP_DIR / "assets" / "mining_sidebar.jpg"), width=235)
     st.caption("Minería peruana · inteligencia de ventas")
-    page = st.radio(
+    page_choice = st.radio(
         "Secciones",
         ["Probar escenarios", "Cómo interpretar", "Calidad del modelo", "Datos y fuentes"],
-        index=0,
-        key="page_navigation",
+        index=None,
+        key="section_navigation_v2",
     )
     st.divider()
     st.markdown("**Modelo en uso**")
     st.caption("SARIMAX con cobre, plata y USD/PEN")
     st.caption("Herramienta analítica independiente; no es una proyección oficial de Buenaventura.")
     st.link_button("Ver portal de inversionistas", OFFICIAL_INVESTOR_URL, use_container_width=True)
+
+# El resumen es la pantalla inicial; se muestra sin agregar un botón al menú.
+page = page_choice or "Resumen"
+
+# Al cambiar de sección, devolver la vista al comienzo del contenido.
+previous_page = st.session_state.get("_previous_page_view")
+if previous_page is not None and previous_page != page:
+    st.components.v1.html(
+        """
+        <script>
+        const parentWindow = window.parent;
+        parentWindow.requestAnimationFrame(() => {
+          const main = parentWindow.document.querySelector('[data-testid="stMain"]');
+          const app = parentWindow.document.querySelector('[data-testid="stAppViewContainer"]');
+          if (main) main.scrollTo({top: 0, behavior: "auto"});
+          if (app) app.scrollTo({top: 0, behavior: "auto"});
+          parentWindow.scrollTo(0, 0);
+        });
+        </script>
+        """,
+        height=0,
+    )
+st.session_state["_previous_page_view"] = page
 
 if page == "Resumen":
     st.markdown(
@@ -1256,7 +1281,7 @@ first_change_pct = float(first_row["variacion_vs_trimestre_anterior_pct"])
 last_row = forecast.iloc[-1]
 last_value = float(last_row["pronostico_usd_millones"])
 if horizon > 4:
-    st.warning(f"Este escenario se extiende hasta {last_row['trimestre']}. Más allá de cuatro trimestres es exploratorio: el backtest no valida ese horizonte y la incertidumbre aumenta.")
+    st.caption(f"Nota: el escenario llega hasta {last_row['trimestre']}. Más allá de cuatro trimestres es exploratorio: el backtest no valida ese horizonte y la incertidumbre aumenta.")
 
 if page in ("Resumen", "Probar escenarios"):
     st.subheader("Ingresos observados y estimación")
